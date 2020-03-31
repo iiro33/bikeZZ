@@ -5,48 +5,53 @@ library(ggthemes)
 
 ui <- fluidPage(
   titlePanel("Helsinki citybike visualization app"),
-  sidebarLayout(
-    sidebarPanel(
-      textAreaInput(inputId = "bike_data",
-                label = "Insert your data",
-                value = "",
-                resize = "none",
-                height = "350px"),
-      submitButton(text = "Analyze")
+  fluidRow(
+    column(3,
+           HTML("<p>Copy and paste your ride data from: <a href='https://kaupunkipyorat.hsl.fi/fi/activity'>https://kaupunkipyorat.hsl.fi/fi/activity</a></p>"),
+           HTML("<p>And click analyze!</p>"),
+           textAreaInput(inputId = "bike_data",
+                         label = "Insert your data",
+                         value = "",
+                         resize = "none"),
+           checkboxGroupInput(inputId = "years",
+                              label = "Include years",
+                              choices = c("2016", "2017", "2018", "2019", "2020"),
+                              selected = c("2016", "2017", "2018", "2019", "2020")),
+           submitButton(text = "Analyze")
+           ),
+    column(5,
+           tableOutput(outputId = "summary_table")
+           ),
+    column(4,
+           plotOutput(outputId = "trip_table")
+           )
     ),
-    mainPanel(
-      fluidRow(
-        column(2,
-               plotOutput(outputId = "trip_table", height = "500px")
-               ),
-        column(2,
-               plotOutput(outputId = "min_graph", height = "500px")
-               ),
-        column(2,
-               plotOutput(outputId = "dist_graph", height = "500px")
-               ),
-        column(6,
-               plotOutput(outputId = "corr_graph", height = "500px")
-        )
-        
-      ),
-      fluidRow(
-        column(6,
-               fluidRow(
-                 column(12,
-                        plotOutput(outputId = "hour_graph", height = "350px")
-                        )
-               ),
-               fluidRow(
-                 column(12,
-                        plotOutput(outputId = "week_graph", height = "350px")
-                 )
-               )
-               ),
-        column(6,
-               plotOutput(outputId = "loc_graph", height = "700px")
-               )
-      )
+  fluidRow(
+    column(3,
+           plotOutput(outputId = "min_graph")
+           ),
+    column(3,
+           plotOutput(outputId = "dist_graph")
+           ),
+    column(6,
+           plotOutput(outputId = "corr_graph")
+           )
+    ),
+  fluidRow(
+    column(6,
+           fluidRow(
+             column(12,
+                    plotOutput(outputId = "hour_graph", height = "350px")
+             )
+           ),
+           fluidRow(
+             column(12,
+                    plotOutput(outputId = "week_graph", height = "350px")
+             )
+           )
+    ),
+    column(6,
+           plotOutput(outputId = "loc_graph", height = "700px")
     )
   )
 )
@@ -73,6 +78,7 @@ server <- function(input, output) {
       temp$arrive_date <- as.Date(temp$arrive_date, format = "%d.%m.%Y")
       temp$minutes <- as.integer(temp$minutes)
       temp$distance_km <- as.numeric(temp$distance_km)
+      temp <- filter(temp, year(depart_date) %in% input$years)
     }
     temp
   })
@@ -81,7 +87,7 @@ server <- function(input, output) {
     if (nrow(df()) > 0) {
       p <- ggplot(df(), aes(y = minutes)) +
         geom_boxplot() +
-        theme_hc() +
+        theme_tufte() +
         theme(axis.text.x = element_blank()) +
         labs(title = "Minutes per ride",
              y = "Minutes") +
@@ -95,10 +101,21 @@ server <- function(input, output) {
     if (nrow(df()) > 0) {
       p <- ggplot(df(), aes(y = distance_km)) +
         geom_boxplot() +
-        theme_hc() +
+        theme_tufte() +
         theme(axis.text.x = element_blank()) +
         labs(title = "Kilometers per ride",
              y = "Kilometers")
+      print(p)
+    }
+  })
+  
+  output$summary_table <- renderTable({
+    if (nrow(df()) > 0) {
+      p <- df() %>% 
+        group_by(area) %>% 
+        summarize(`Total rides` = n(),
+                  `Total minutes` = sum(minutes),
+                  `Total kilometers` = sum(distance_km))
       print(p)
     }
   })
@@ -110,8 +127,8 @@ server <- function(input, output) {
         count(year, name = "trips") %>% 
         ggplot(aes(x = year, y = trips)) +
         geom_bar(stat = "identity") +
-        theme_hc() +
-        labs(title = paste0("You have made ", nrow(df()), " rides in total"),
+        theme_tufte() +
+        labs(title = paste0("Rides by year"),
              y = "Rides",
              x = "Year")
       print(p)
@@ -123,7 +140,7 @@ server <- function(input, output) {
       p <- ggplot(df(), aes(x = minutes, y = distance_km)) +
         geom_point() +
         geom_smooth(method = "lm") +
-        theme_hc() +
+        theme_tufte() +
         labs(title = "Minutes vs kilometers",
              x = "Minutes",
              y = "Kilometers")
@@ -143,10 +160,8 @@ server <- function(input, output) {
         pivot_longer(-location, names_to = "direction", values_to = "value") %>% 
         ggplot(aes(x = reorder(location, value, sum), y = value, fill = direction)) +
         geom_bar(stat = "identity", position = "dodge") +
-        theme(axis.text.x = element_text(angle = 45, hjust = 1),
-              axis.text.y = element_text(size = 18)) +
         coord_flip() + 
-        theme_hc() +
+        theme_tufte() +
         labs(title = "Top10 most popular departure and destination locations",
              x = "Location",
              y = "Rides",
@@ -164,7 +179,7 @@ server <- function(input, output) {
         geom_bar(stat = "identity") +
         scale_x_continuous(breaks = seq(0, 23, 1),
                            labels = seq(0, 23, 1)) +
-        theme_hc() +
+        theme_tufte() +
         labs(title = "Rides per hour of day",
              x = "Hour",
              y = "Rides")
@@ -175,11 +190,11 @@ server <- function(input, output) {
   output$week_graph <- renderPlot({
     if (nrow(df()) > 0) {
       p <- df() %>% 
-        group_by(wday = weekdays(depart_date, abbreviate = TRUE)) %>% 
+        group_by(week_day = wday(depart_date, week_start = 1, abbr = TRUE, label = TRUE)) %>% 
         summarize(n = n()) %>% 
-        ggplot(aes(x = wday, y = n)) +
+        ggplot(aes(x = week_day, y = n)) +
         geom_bar(stat = "identity") +
-        theme_hc() +
+        theme_tufte() +
         labs(title = "Rides per day of week",
              x = "Weekday",
              y = "Rides")
